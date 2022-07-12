@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.11.4
+#       jupytext_version: 1.10.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -337,7 +337,7 @@ simmilarities, (dist, shape) = cluster_simmilarity(get_clusters(B, dbscan), get_
 
 # %%
 mgen = MaskMapGenerator(None, 0.5, 0.2)
-n = 300
+n = 600
 allmaps =  [m for m in mgen.generate(n)]
 
 
@@ -365,15 +365,82 @@ def showmap(m):
 
 
 # %%
+def get_map_points(map_matrix):
+    map_points = np.array(
+                    sorted(list(
+                        zip(np.where(map_matrix != 0)[0],
+                            np.where(map_matrix != 0)[1])
+                    )))
+    
+    if len(map_points) == 0:
+        return []
+    else:
+        return map_points
+
+
+# %%
+from sklearn.cluster import DBSCAN, OPTICS, Birch, MeanShift, AgglomerativeClustering
+from collections import defaultdict
+from tqdm.notebook import tqdm
+from sklearn.metrics import confusion_matrix
+
+optics = OPTICS(eps= 5, min_samples=4, cluster_method="DBSCAN")
+dbscan = DBSCAN(5, min_samples=4)
+clfs = [optics, dbscan] 
+clf_metrics = []
+
+blobsets = { k: set(tuple(pair) for pair in v) for k, v in mgen.blobs.items()}
+linesets = { k: set(tuple(pair) for pair in v) for k, v in mgen.lines.items()}
+
+all_confs = []
+
+for clf in tqdm(clfs):
+    conf_matrices = []
+    for i, m in tqdm(enumerate(allmaps)):
+        clstrs = get_clusters(m, clf)
+        arr = get_cluster_array(clstrs)
+        map_points = get_map_points(m)
+        generated_ground_clusters = []
+        backsee = 8
+        for kb, blob in mgen.blobs.items():
+            if i >= kb and i - backsee < kb:
+                generated_ground_clusters.append(blob)
+        for lb, line in mgen.lines.items():
+             if i >= lb and i - backsee < lb:
+                generated_ground_clusters.append(line)
+        generated_cluster_pixels = np.concatenate(generated_ground_clusters) if len(generated_ground_clusters)!=0 else np.array([])
+        truth_set = set(tuple(pair) for pair in generated_cluster_pixels)
+        nonzero_set = set(tuple(pair) for pair in map_points)
+        if generated_ground_clusters:
+            alld_a= map_points 
+            alld_b = np.zeros((alld_a.shape[0], 3), dtype=int)
+            alld_b[:,-2:] = alld_a
+            match_ground = [tuple(x[-2:]) in truth_set for x in alld_b]
+            alld_b[:,0][match_ground] = 1
+            alld_b = np.array(sorted([tuple(x) for x in alld_b], key=lambda x: x[-2:]))
+        clstrs[:,0][clstrs[:,0] != -1] = 1
+        clstrs[:,0][clstrs[:,0] == -1] = 0
+        tn, fp, fn, tp = confusion_matrix(alld_b[:,0], clstrs[:,0], labels=[0,1]).ravel()
+        conf_matrices.append((tn, fp, fn, tp))
+    all_confs.append(conf_matrices)
+
+    
+
+
+# %%
+conf_optics = np.array(all_confs[0])
+conf_dbscan= np.array(all_confs[1])
+
+# %%
+conf_optics.sum(axis=1)
+
+# %%
 from sklearn.cluster import DBSCAN, OPTICS, Birch, MeanShift, AgglomerativeClustering
 from collections import defaultdict
 from tqdm.notebook import tqdm
 
-optics = OPTICS(min_samples=4, max_eps=5)
-birch = Birch()
-ms = MeanShift()
-aggc = AgglomerativeClustering(None, distance_threshold = 10)
-
+#optics = OPTICS(eps= 5, min_samples=4, cluster_method="dbscan")
+optics = OPTICS(min_samples=4)
 dbscan = DBSCAN(5, min_samples=4)
 clfs = [optics, dbscan] 
 clf_metrics = []
@@ -394,7 +461,7 @@ for clf in tqdm(clfs):
         clstrs = get_clusters(m, clf)
         arr = get_cluster_array(clstrs)
         possible = []
-        backsee = 8
+        backsee = 20
         allclustered = set(tuple(pair) for pair in clstrs[clstrs[:,0] != -1][:,-2:])
         tn = len(set(tuple(pair) for pair in clstrs[clstrs[:,0] == -1][:,-2:]))
         all_pixels = set(tuple(pair) for pair in clstrs[:,-2:])
@@ -411,11 +478,11 @@ for clf in tqdm(clfs):
         for kb, blob in mgen.blobs.items():
             if i >= kb and i - backsee < kb:
                 if blobsets[kb]:
-                    blob_acc[kb].append(len(allclustered & blobsets[kb])/len(all_pixels))
+                    blob_acc[kb].append(len(allclustered & blobsets[kb])/len(data1))
         for lb, line in mgen.lines.items():
              if i >= lb and i - backsee < lb:
                 if linesets[lb]:
-                    line_acc[lb].append(len(allclustered & linesets[lb])/len(all_pixels))
+                    line_acc[lb].append(len(allclustered & linesets[lb])/len(data1))
 
         if possible:
             alld_a= np.array(list(all_pixels)) 
@@ -463,15 +530,42 @@ print(calc_fp_ratio(all_metrics[1]))
 
 
 # %%
+print(calc_fp_ratio(all_metrics[0]))
+print(calc_fp_ratio(all_metrics[1]))
+
+
+# %%
 [summed_conf_mat(all_metrics[i]) for i in range(2)]
 
 # %%
-fig, axes = plt.subplots(2,1, figsize=(8,15))
-for blobber, axe in zip(acc_lines,axes):
-    for k,v in blobber.items():
-        axe.plot(v)
+print(calc_fp_ratio(all_metrics[0]))
+print(calc_fp_ratio(all_metrics[1]))
+
 
 # %%
+[summed_conf_mat(all_metrics[i]) for i in range(2)]
+
+
+# %%
+
+# %%
+def get_decay_plot(ind):
+    fig, axe = plt.subplots(1,1, figsize=(8,6))
+    liner, blobber = acc_lines[ind], acc_blobs[ind]
+    for k,v in blobber.items():
+        axe.plot(v,alpha=0.4)
+    for k,v in liner.items():
+        axe.plot(v, alpha=0.4)
+    axe.set_xlim(0,19)
+    axe.set_xticks(range(20)[::2])
+    axe.set_ylim(0,0.20)
+
+
+# %%
+get_decay_plot(0)
+
+# %%
+get_decay_plot(1)
 
 # %%
 fig, axes = plt.subplots(3,2, figsize=(16,15))
@@ -599,6 +693,32 @@ do[:,1].sum(), dd[:,1].sum()
 do[:,2].sum(), dd[:,2].sum()
 
 # %%
+do.shape
+
+
+# %%
+def get_bar_progress(data_):
+    fig, axe = plt.subplots(1,1,figsize=(8,6))
+    width = 1.
+    old = data_[:,1][:300]
+    new = data_[:, 2][:300]
+    ind = range(old.shape[0])
+
+    p1 = axe.bar(ind, old, width, label="old cluster")
+    p2 = axe.bar(ind, new, width, bottom = old, label="new clusters")
+    axe.set_xlim(0,300)
+    axe.set_ylim(0,16)
+    axe.legend()
+#plt.xticks(ind)
+
+
+# %%
+get_bar_progress(do)
+
+# %%
+get_bar_progress(dd)
+
+# %%
 plt.plot(do[:,1])
 plt.plot(do[:,2])
 
@@ -672,8 +792,54 @@ def listify(map_matrix):
 real = [listify(x) for x in allmaps]
 realy = [x[:,0] for x in allmaps_possible_clusterpoints]
 
+
 # %%
-allmaps_possible_clusterpoints[0]
+def predict(clf, x):
+    clf.fit(x)
+    clustered_points = np.hstack((
+                            clf.labels_.reshape(-1,1),
+                            x
+                            ))
+    clustered_points[:, 0][clustered_points[:, 0] != -1 ] = 1
+    clustered_points[:, 0][clustered_points[:, 0] == -1 ] = 0
+    return clustered_points
+
+
+# %%
+real_pred = [predict(dbscan, x) for x in real]
+
+# %%
+
+# %%
+realy
+
+# %%
+
+# %%
+plt.plot(fpr, tpr, color='darkorange',
+         lw=2)
+
+# %%
+np_real_pred = np.concatenate(real_pred)[:,0]
+np_truth = np.concatenate(realy)
+
+
+# %%
+np_real_pred.shape[0]
+
+# %%
+pred_y
+
+# %%
+pred_y = np.split(np_real_pred[:24500],245)
+truth_y = np.split(np_truth[:24500],245)
+
+# %%
+from sklearn.metrics import roc_curve
+fpr, tpr, _ = roc_curve(pred_y,truth_y)
+
+# %%
+get_clusters
 
 # %%
 img = np.zeros((256,256))
@@ -681,33 +847,40 @@ img[real[1][:,0],real[1][:,0]] = realy[1]
 plt.imshow(img)
 
 # %%
-real[1], realy[1]
-
-# %%
-
-# %%
-import itertools
-for d in itertools.product((1,2,3),'abb','*=-'):
-    print(d)
-
-# %%
 from sklearn.metrics import log_loss, accuracy_score
+import itertools
 
-grid_score = {}
-for min_samples, metric, eps in tqdm(itertools.product((1,5,8),[ 'cosine', 'euclidean', 'l2'],[1.,5.,8.])):
-    clf = OPTICS(min_samples=min_samples, metric=metric, eps=eps)
-    cv_acc = []
-    for x,y in tqdm(zip(real, realy)):
-        clf.fit(x)
-        clustered_points = np.hstack((
-                                clf.labels_.reshape(-1,1),
-                                x
-                                ))
-        clustered_points[:, 0][clustered_points[:, 0] != -1 ] = 1
-        clustered_points[:, 0][clustered_points[:, 0] == -1 ] = 0
-        ypred = clustered_points[:,0]
-        cv_acc.append(accuracy_score(y, ypred))
-    grid_score[(min_samples, metric, eps)] = np.mean(cv_acc)
+def score_grid(cls, grid):
+    grid_score = {}
+    for min_samples, eps in tqdm(itertools.product(*grid)):
+        clf = cls(min_samples=min_samples, eps=eps)
+        cv_acc = []
+        for x,y in tqdm(zip(real, realy)):
+            clf.fit(x)
+            clustered_points = np.hstack((
+                                    clf.labels_.reshape(-1,1),
+                                    x
+                                    ))
+            clustered_points[:, 0][clustered_points[:, 0] != -1 ] = 1
+            clustered_points[:, 0][clustered_points[:, 0] == -1 ] = 0
+            ypred = clustered_points[:,0]
+            cv_acc.append(accuracy_score(y, ypred))
+        grid_score[(min_samples, eps)] = np.mean(cv_acc)
+    return grid_score
+
+
+# %%
+grid = [(1,3,5,8, 10),[None]]
+
+optics_score = score_grid(OPTICS, grid)
+grid = [(1,5,8, 10),[1.,4., 5.,8.]]
+dbscan_score = score_grid(DBSCAN, grid)
+
+# %%
+optics_score
+
+# %%
+dbscan_score
 
 # %%
 from sklearn import svm, datasets
