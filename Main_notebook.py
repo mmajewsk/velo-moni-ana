@@ -76,14 +76,18 @@
 # !pip install rrcf
 
 # %%
+# %load_ext autoreload
+# %autoreload 2
+
+# %%
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.datasets import make_blobs
+
 import rrcf
 from sklearn.cluster import DBSCAN
-from sklearn.linear_model import LinearRegression
+
 
 # %% [markdown]
 # # Phase 0
@@ -96,17 +100,9 @@ index = 0
 lines = []
 blobs = []
 
-D_MIN = 10
 
-def make_line(h, w, line_len):
-    alpha = np.random.uniform(0, np.pi)
-    fun = np.poly1d([np.tan(alpha),np.random.randint(0, h)])
-    start_X = np.random.randint(0, w)
-    # X = np.uniform(start_X, start_X + line_len*np.cos(alpha), size=line_len)
-    X = np.linspace(start_X, start_X + line_len*np.cos(alpha), num=line_len)
-    Y = fun(X)
-    return np.vstack((X%w, Y%h)).T.astype(int)
 
+from velopix import make_line, make_blob, make_uniform, MaskMapGenerator, get_map_points
 
 # %%
 random_line = make_line(256, 256, np.abs(np.random.randint(40)))
@@ -117,23 +113,13 @@ one_line_map=np.zeros((256,256))
 amplifying_factor=300
 for x, y in random_line:
     one_line_map[x, y] = amplifying_factor
-
-# %%
 one_line_map=np.zeros((256,256))
 amplifying_factor=300
 one_line_map[random_line[:,0], random_line[:,1]] = amplifying_factor
+plt.imshow(one_line_map, interpolation="None", origin="lower")
+plt.savefig('line_example.png')
 
 # %%
-plt.imshow(one_line_map)
-
-
-# %%
-def make_blob(n_samples, avg_std = 5, size=256):
-    return make_blobs(n_samples,
-                      cluster_std=np.abs(np.random.randn()*5+1), 
-                      centers=1, 
-                      center_box=(0,size*0.7))[0].astype(int)
-
 
 # %%
 random_blob = make_blob(n_samples=np.abs(np.random.randint(40)),size=256)
@@ -143,48 +129,41 @@ random_blob.T
 one_blob_map=np.zeros((256,256))
 amplifying_factor=300
 one_blob_map[random_blob[:,0], random_blob[:,1]] = amplifying_factor
-plt.imshow(one_blob_map)
+plt.imshow(one_blob_map, interpolation="None", origin="lower")
+
 
 # %%
-randmap = np.maximum(np.zeros((256,256)), np.random.binomial(n=1, p=0.0006,size=(256,256))*amplifying_factor)
+random_blob = make_blob(n_samples=np.abs(np.random.randint(40)),size=256)
+one_blob_map=np.zeros((256,256))
+amplifying_factor=300
+one_blob_map[random_blob[:,0], random_blob[:,1]] = amplifying_factor
+plt.imshow(one_blob_map, interpolation="None", origin="lower")
+plt.savefig('blob_example.png')
+
+# %%
+randmap = make_uniform()
+randmap = np.maximum(np.zeros((256, 256)), make_uniform())
+
 plt.imshow(randmap)
+
+# %%
+randmap2 = make_uniform(p=0.06)
+plt.imshow(randmap2, interpolation='none', origin='lower')
+plt.savefig('uniform_example.png')
+
+# %%
+np.unique(randmap) 
+
+# %%
+plt.imshow(randmap != 0.0)
 
 # %%
 randmap = np.random.binomial(n=1, p=0.8,size=(256,256))
 plt.imshow(randmap)
 
-
 # %%
-def dice_roll():
-    return np.random.rand()
 
-class MaskMapGenerator:
-
-    def __init__(self,starting_map=None, gaussian_blob_prob=0.5, line_prob=0.2, amplifying_factor=300):
-        self.current_map = np.zeros((256,256)) if starting_map is None else starting_map
-        self.blobs = {}
-        self.lines = {}
-        self.total_iterator = 0
-        self.gauss_prob = gaussian_blob_prob
-        self.line_prob = line_prob
-    
-    def generate(self, n=100):
-        for i in range(n):
-            
-            if dice_roll() < self.gauss_prob:
-                new_blob = make_blob(n_samples=np.abs(np.random.randint(40)),size=256)
-                self.current_map[new_blob[:,0], new_blob[:,1]] = amplifying_factor
-                self.blobs[self.total_iterator] = new_blob
-            elif dice_roll() < self.line_prob:
-                new_line = make_line(256, 256, np.abs(np.random.randint(40)))
-                self.current_map[new_line[:,0], new_line[:,1]] = amplifying_factor
-                self.lines[self.total_iterator] = new_line
-            else:
-                self.current_map = np.maximum(self.current_map, np.random.binomial(n=1, p=0.0006,size=(256,256))*amplifying_factor)
-            self.current_map *= np.random.binomial(n=1, p=0.8,size=(256,256))
-            yield self.current_map
-            self.total_iterator += 1
-
+from velopix import MaskMapGenerator, cluster_simmilarity, get_clusters, get_cluster_array
     
 
 # %%
@@ -203,119 +182,12 @@ fig, axis = plt.subplots(nrows=1, ncols=2, figsize=(10,6))
 axis[0].imshow(C)
 axis[1].imshow(D)
 
-
 # %% [markdown]
 # ### Utility algorithms
 
 # %%
-def get_clusters(map_matrix, clustering_algorithm):
-    map_points = np.array(
-                    sorted(list(
-                        zip(np.where(map_matrix != 0)[0],
-                            np.where(map_matrix != 0)[1])
-                    )))
-    
-    if len(map_points) == 0:
-        return []
-    
-    clustering_algorithm.fit(map_points)
-    clustered_points = np.hstack((
-                                clustering_algorithm.labels_.reshape(-1,1),
-                                map_points
-                                ))
-    return clustered_points
-
 
 # %%
-def measure_clusters(clustered_points):
-    clusters=[]
-    cluster_centroids=[]
-    for cluster_number in np.sort(
-                            np.unique(
-                                clustered_points[:, 0]
-                            )):
-        if cluster_number != -1:
-            
-            points_of_cluster = clustered_points[np.where(clustered_points[:,0] == cluster_number), 1:] 
-            points_of_cluster = np.squeeze(points_of_cluster)
-            position, cluster_metrics = get_metrics(points_of_cluster)
-            clusters.append(cluster_metrics)
-            cluster_centroids.append(position)
-    return np.array(cluster_centroids), np.array(clusters)
-
-
-def get_metrics(cluster_points):
-    #returns:
-    # Position
-    # Point count / avg
-    # Blair-Bliss (density) 
-    # Correlation coeffitience (roundness) 
-    # Linear trend direction 
-    position = cluster_points.mean(0)
-    
-    point_count = cluster_points.shape[0] / 100
-    density = np.sqrt(
-                np.sum(
-                    (cluster_points - cluster_points.mean(0))**2, 1)
-                ).mean()
-    roundness = np.abs(np.corrcoef(cluster_points.T + np.random.normal(scale=1e-8 ,size=cluster_points.T.shape))[0,1])
-    direction = np.arctan(LinearRegression() \
-                .fit(
-                    X = cluster_points[:, 0].reshape(-1,1), 
-                    y = cluster_points[:, 1].reshape(-1,1)) \
-                .coef_[0,0])
-    return position, np.hstack((point_count,
-                                density,
-                                roundness,
-                                direction))
-
-    
-def l2_axis_norm(M, axis=1):
-    return (np.sum(np.abs(M)**2,axis=axis)**(1./2)
-           ).reshape(-1,1)
-
-
-def bi_directional_softmax(M):
-    row_wise = np.exp(M) / np.sum(np.exp(M), axis=0).reshape(1,-1)
-    column_wise = np.exp(M) / np.sum(np.exp(M), axis=1).reshape(-1,1)
-    return (2*row_wise*column_wise)/(row_wise + column_wise)
-
-def find_strong_max(M):
-    maxed_M = np.zeros_like(M)
-    for row_idx, row in enumerate(M):
-        for col_idx, el in enumerate(row):
-            if (el == np.max(M, axis=1)[row_idx]) and (el == np.max(M, axis=0)[col_idx]) and (el > 0.3):
-                maxed_M[row_idx, col_idx] = 1
-            else:
-                maxed_M[row_idx, col_idx] = 0
-    return maxed_M
-
-        
-def cluster_simmilarity(points_current, points_prev):
-    curr_centroids, curr_map_metrics = measure_clusters(points_current)
-    prev_centroids, prev_map_metrics = measure_clusters(points_prev)
-    if len(prev_centroids) == 0 and len(curr_centroids) != 0:
-        return np.zeros_like(curr_centroids), (None, None)
-    elif len(curr_centroids) == 0 and len(prev_centroids) != 0:
-        return np.zeros_like(prev_centroids), (None, None)
-    elif len(prev_centroids) == 0 and len(curr_centroids) == 0:
-        return None, (None, None)
-    
-    norm_matrix = l2_axis_norm(curr_map_metrics) @ (l2_axis_norm(prev_map_metrics)).T
-    shape_simmilarity_matrix = curr_map_metrics @ prev_map_metrics.T * (norm_matrix**-1)
-    
-    shape_simmilarity_matrix = bi_directional_softmax(shape_simmilarity_matrix/(np.std(shape_simmilarity_matrix)))
-    
-    
-    distance_matrix = np.sqrt(np.abs(
-                                 np.sum(curr_centroids*curr_centroids, axis=1).reshape(-1,1) 
-                               - 2*(curr_centroids @ prev_centroids.T) 
-                               + np.sum(prev_centroids*prev_centroids, axis=1)
-                       ))
-    
-    distance_matrix = (1/D_MIN) * np.clip(D_MIN - distance_matrix, a_min=0, a_max=D_MIN)
-    simmilarity_matrix = (2*shape_simmilarity_matrix * distance_matrix)/(shape_simmilarity_matrix + distance_matrix)
-    return simmilarity_matrix, (distance_matrix, shape_simmilarity_matrix)
 
 # %%
 A = B = None
@@ -333,50 +205,12 @@ dbscan = DBSCAN(5, min_samples=4)
 simmilarities, (dist, shape) = cluster_simmilarity(get_clusters(B, dbscan), get_clusters(A, dbscan))
 
 # %% [markdown]
-# # Comp-aring clustering algorithms
+# # Comparing clustering algorithms
 
 # %%
 mgen = MaskMapGenerator(None, 0.5, 0.2)
 n = 600
 allmaps =  [m for m in mgen.generate(n)]
-
-
-# %%
-def get_cluster_array(clstrs):
-    only_clstrs = clstrs[clstrs[:,0] != -1]
-    all_ids = np.unique(only_clstrs[:,0])
-    cluster_array = []
-    for clstr_id in all_ids:
-        separate_cluster = only_clstrs[only_clstrs[:,0] == clstr_id]
-        cluster_array.append(separate_cluster[:,-2:])
-    return cluster_array
-        
-
-
-# %%
-def showmap(m):
-    fig, axis = plt.subplots(nrows=1, ncols=1, figsize=(10,6))
-    cnames = ['A','B']
-    centroids, _ = measure_clusters(get_clusters(m, dbscan))
-    axis.imshow(m)
-    for centr_number, centroid in enumerate(centroids):
-        axis.set_title(cnames[0])
-        axis.text(x = centroid[1], y = centroid[0], s=str(centr_number), bbox=dict(color='white', alpha=0.1))
-
-
-# %%
-def get_map_points(map_matrix):
-    map_points = np.array(
-                    sorted(list(
-                        zip(np.where(map_matrix != 0)[0],
-                            np.where(map_matrix != 0)[1])
-                    )))
-    
-    if len(map_points) == 0:
-        return []
-    else:
-        return map_points
-
 
 # %%
 from sklearn.cluster import DBSCAN, OPTICS, Birch, MeanShift, AgglomerativeClustering
@@ -384,7 +218,7 @@ from collections import defaultdict
 from tqdm.notebook import tqdm
 from sklearn.metrics import confusion_matrix
 
-optics = OPTICS(eps= 5, min_samples=4, cluster_method="DBSCAN")
+optics = OPTICS(eps= 5, min_samples=4, cluster_method="dbscan")
 dbscan = DBSCAN(5, min_samples=4)
 clfs = [optics, dbscan] 
 clf_metrics = []
@@ -420,8 +254,9 @@ for clf in tqdm(clfs):
             alld_b = np.array(sorted([tuple(x) for x in alld_b], key=lambda x: x[-2:]))
         clstrs[:,0][clstrs[:,0] != -1] = 1
         clstrs[:,0][clstrs[:,0] == -1] = 0
-        tn, fp, fn, tp = confusion_matrix(alld_b[:,0], clstrs[:,0], labels=[0,1]).ravel()
-        conf_matrices.append((tn, fp, fn, tp))
+        if generated_ground_clusters:
+            tn, fp, fn, tp = confusion_matrix(alld_b[:,0], clstrs[:,0], labels=[0,1]).ravel()
+            conf_matrices.append((tn, fp, fn, tp))
     all_confs.append(conf_matrices)
 
     
@@ -430,9 +265,6 @@ for clf in tqdm(clfs):
 # %%
 conf_optics = np.array(all_confs[0])
 conf_dbscan= np.array(all_confs[1])
-
-# %%
-conf_optics.sum(axis=1)
 
 # %%
 from sklearn.cluster import DBSCAN, OPTICS, Birch, MeanShift, AgglomerativeClustering
@@ -952,15 +784,7 @@ axis.set_title('similarity score')
 axis.set_xlabel('B')
 axis.set_ylabel('A')
 
-
 # %%
-def get_cluster_mapping(simmilarity_matrix):
-    cluster_pairs =  {}
-    for col_idx, column in enumerate(find_strong_max(simmilarity_matrix.T)):
-        if np.max(column) == 1:
-            cluster_pairs[col_idx] = np.argmax(column)
-    return cluster_pairs
-
 
 # %%
 fig, axis = plt.subplots(nrows=1, ncols=2, figsize=(10,6))
@@ -1031,142 +855,3 @@ novelty_measures(A, B, dbscan)
 
 # %% [markdown]
 # ### Outlierness
-
-# %%
-from sklearn.neighbors import NearestNeighbors
-
-
-# %%
-def local_density_imbalance(curr_map, n_neighbors):
-    points = np.array(np.where(curr_map != 0)).T
-    near_neigh = NearestNeighbors(n_neighbors=1+n_neighbors)
-    near_neigh.fit(points)
-    
-
-    std_of_avg_knn_distance = np.std(np.mean(near_neigh.kneighbors(points)[0][:,1:], axis=1))
-    return std_of_avg_knn_distance
-
-def directional_density_imbalance(curr_map, n_neighbors):
-    points = np.array(np.where(curr_map != 0)).T
-    near_neigh = NearestNeighbors(n_neighbors=1+n_neighbors)
-    near_neigh.fit(points)
-    densities = np.sum(near_neigh.kneighbors(points)[0][:,1:], axis=1)
-    lr = LinearRegression()
-    lr.fit(X=points, y=densities)
-    return lr.coef_
-
-        
-def outlierness_measures(curr_map, dbscan, n_neighbors=5):
-    
-    curr_clusters = get_clusters(curr_map, dbscan)
-    curr_clusters = curr_clusters[np.where(curr_clusters[:,0] != -1)]
-    number_of_clusters = np.unique(curr_clusters[:,0]).shape[0]
-    total_points = np.where(curr_map != 0)[0].shape[0]
-    points_in_clusters = curr_clusters.shape[0]
-    total_points_normalized = total_points
-    
-    directional_imbalance_coef =  directional_density_imbalance(curr_map, n_neighbors)
-    local_imbalance_coef = local_density_imbalance(curr_map, n_neighbors)
-    
-    x_directional_imbalance_coef, y_directional_imbalance_coef = directional_imbalance_coef
-    return (number_of_clusters,
-            points_in_clusters,
-            total_points_normalized,
-            x_directional_imbalance_coef,
-            y_directional_imbalance_coef,
-            local_imbalance_coef)
-    
-
-
-# %%
-outlierness_measures(A, dbscan)
-
-# %%
-num_trees = 150
-tree_size = 16
-shingle_size = 2
-
-curr_map = np.zeros((256,256))
-codisp_hist = []
-
-forest = []
-for _ in range(num_trees):
-    tree = rrcf.RCTree()
-    forest.append(tree)
-
-index = 0
-
-lines = []
-blobs = []
-
-# %%
-# Use the "shingle" generator to create rolling window
-mgen = MaskMapGenerator(curr_map, 0.03, 0.02)
-rgen = mgen.generate(n=600)
-#rgen = randmap_generator(gaussian_blob_prob=0.03, line_prob=0.02, n=600, starting_map=curr_map)
-# Create a dict to store anomaly score of each point
-rgen_shingled = rrcf.shingle(rgen, size=shingle_size)
-# For each shingle...
-start = True
-novelties = []
-for rmap in rgen_shingled:
-    #print(rmap.shape)
-    if start is True:
-        start = False
-        pass
-    else:
-        rmap_measures = novelty_measures(curr_map = rmap[1], prev_map=rmap[0], dbscan=dbscan)
-        novelties.append(rmap_measures)
-        codisps = []
-        for tree in forest:
-            new_index = np.random.randint(tree_size)
-            if len(tree.leaves) > tree_size:
-                tree.forget_point(new_index)
-                tree.insert_point(rmap_measures, index=new_index)
-                codisps.append(tree.codisp(new_index))
-            else:
-                tree.insert_point(rmap_measures, index=index)
-                codisps.append(tree.codisp(index))
-        new_codisp = np.mean(codisps)
-#         print(new_codisp)
-        codisp_hist.append(new_codisp)
-        index += 1
-
-
-# %%
-fig, ax1 = plt.subplots(figsize=(14, 7))
-ax1.plot(codisp_hist)
-ax1.vlines(mgen.blobs.keys(), ymin=0, ymax=10, colors='red')
-ax1.vlines(mgen.lines.keys(), ymin=0, ymax=10, colors='green')
-
-# %%
-np.array(novelties)[lines]
-
-# %%
-np.array(novelties)[blobs]
-
-# %%
-novelties
-
-# %%
-blobs
-
-# %%
-values = np.array(codisp_hist)
-index = np.array(range(len(codisp_hist)))
-fig, ax1 = plt.subplots(figsize=(14, 7))
-ax1.plot(values, marker='o', linestyle="None", color='blue')
-ax1.plot(mgen.blobs, values[blobs], marker='o', linestyle="None", color='red')
-ax1.plot(mgen.lines, values[lines], marker='o', linestyle="None", color='yellow')
-
-
-# %%
-values[blobs]
-
-# %%
-
-# %%
-
-# %%
-
-# %%
