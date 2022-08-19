@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Majewski"
+  given-names: "Maciej W."
+  orcid: "https://orcid.org/0000-0002-4658-6962"
+- family-names: "Radoń"
+  given-names: "Patryk"
+- family-names: "Szumlak"
+  given-names: "Tomasz" 
+  orcid: "https://orcid.org/0000-0002-2562-7163"
+title: "Velopix mask studies for clustering "
+version: 1.0.0
+date-released: 2022-08-19
+url: "https://github.com/mmajewsk/velo-moni-ana"
