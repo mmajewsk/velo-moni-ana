@@ -6,9 +6,9 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.11.4
+#       jupytext_version: 1.13.8
 #   kernelspec:
-#     display_name: Python 3
+#     display_name: Python 3 (ipykernel)
 #     language: python
 #     name: python3
 # ---
@@ -188,6 +188,7 @@ class MaskMapGenerator:
     
 
 # %%
+
 D = C = None
 n = 0
 m = 40
@@ -301,11 +302,15 @@ def cluster_simmilarity(points_current, points_prev):
     elif len(prev_centroids) == 0 and len(curr_centroids) == 0:
         return None, (None, None)
     
+    
     norm_matrix = l2_axis_norm(curr_map_metrics) @ (l2_axis_norm(prev_map_metrics)).T
     shape_simmilarity_matrix = curr_map_metrics @ prev_map_metrics.T * (norm_matrix**-1)
-    
-    shape_simmilarity_matrix = bi_directional_softmax(shape_simmilarity_matrix/(np.std(shape_simmilarity_matrix)))
-    
+    print(shape_simmilarity_matrix)
+    partstep = shape_simmilarity_matrix/(np.std(shape_simmilarity_matrix))+0.01
+    print("heeere")
+    print(partstep)
+    shape_simmilarity_matrix = bi_directional_softmax(partstep)
+    print(shape_simmilarity_matrix)
     
     distance_matrix = np.sqrt(np.abs(
                                  np.sum(curr_centroids*curr_centroids, axis=1).reshape(-1,1) 
@@ -316,6 +321,16 @@ def cluster_simmilarity(points_current, points_prev):
     distance_matrix = (1/D_MIN) * np.clip(D_MIN - distance_matrix, a_min=0, a_max=D_MIN)
     simmilarity_matrix = (2*shape_simmilarity_matrix * distance_matrix)/(shape_simmilarity_matrix + distance_matrix)
     return simmilarity_matrix, (distance_matrix, shape_simmilarity_matrix)
+
+# %%
+dd = np.array([[849.03887384, 847.03887384],
+ [847.03887385, 849.03887384]])
+
+# %%
+np.exp(dd)
+
+# %%
+bi_directional_softmax(dd)
 
 # %%
 A = B = None
@@ -338,6 +353,7 @@ simmilarities, (dist, shape) = cluster_simmilarity(get_clusters(B, dbscan), get_
 # %%
 mgen = MaskMapGenerator(None, 0.5, 0.2)
 n = 300
+np.random.seed(1410)
 allmaps =  [m for m in mgen.generate(n)]
 
 
@@ -734,6 +750,9 @@ clf.best_estimator_
 dist
 
 # %%
+centroids
+
+# %%
 
 
 fig, axis = plt.subplots(nrows=1, ncols=2, figsize=(10,6))
@@ -749,9 +768,6 @@ axis[1].imshow(A)
 for centr_number, centroid in enumerate(centroids):
     axis[1].set_title(cnames[1])
     axis[1].text(x = centroid[1], y = centroid[0], s=str(centr_number), bbox=dict(color='white', alpha=0.1))
-
-# %%
-shape.shape
 
 # %%
 fig, axis = plt.subplots(1, 2, figsize=(16,6))
@@ -790,24 +806,121 @@ def get_cluster_mapping(simmilarity_matrix):
 
 
 # %%
-fig, axis = plt.subplots(nrows=1, ncols=2, figsize=(10,6))
+B
 
-centroids, _ = measure_clusters(get_clusters(B, dbscan))
-axis[0].imshow(B)
+# %%
+True
+
+# %%
+
+# %%
+bc2[:,1]
+
+# %%
+import matplotlib.colors
+cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ["white","black","red"])
+
+
+# %%
+label_mapping
+
+# %%
+centroids
+
+# %%
+fig, axis = plt.subplots(nrows=1, ncols=2, figsize=(20,12))
+frame = 284
+B = allmaps[frame-1]
+A = allmaps[frame]
+A_bin = A.copy()
+B_bin = B.copy()
+A_bin[A_bin!=0] = 1 
+A_bin[A_bin==0] = 0 
+B_bin[B_bin!=0] = 1 
+B_bin[B_bin==0] = 0
+bc = get_clusters(B, dbscan)
+bc2 = bc[bc[:,0] != -1]
+B_bin[bc2[:,1], bc2[:,2]] = 2
+ac = get_clusters(A, dbscan)
+ac2 = ac[ac[:,0] != -1]
+A_bin[ac2[:,1], ac2[:,2]] = 2
+centroids, _ = measure_clusters(bc)
+axis[0].imshow(B_bin, cmap=cmap, interpolation='none')
 for centr_number, centroid in enumerate(centroids):
     axis[0].set_title(cnames[0])
-    axis[0].text(x = centroid[1], y = centroid[0], s=str(centr_number), bbox=dict(color='white', alpha=0.1))
+    axis[0].text(x = centroid[1]+5, y = centroid[0]-5, s=str(centr_number), bbox=dict(color='white', alpha=0.1))
     
-centroids, _ = measure_clusters(get_clusters(A, dbscan))
-axis[1].imshow(A)
+centroids, _ = measure_clusters(ac)
+axis[1].imshow(A_bin, cmap=cmap, interpolation='none')
+simmilarities, (dist, shape) = cluster_simmilarity(bc, ac)
 label_mapping = get_cluster_mapping(simmilarities)
+print(simmilarities)
 for centr_number, centroid in enumerate(centroids):
     axis[1].set_title(cnames[1])
     if centr_number in label_mapping.keys():
         name = str(label_mapping[centr_number])
     else:
         name = 'new'
-    axis[1].text(x = centroid[1], y = centroid[0], s=name, bbox=dict(color='white', alpha=0.1))
+    axis[1].text(x = centroid[1]+10, y = centroid[0]-10, s=name, bbox=dict(color='white', alpha=0.1))
+
+# %%
+figsizenow = (7,7)
+fig, axis = plt.subplots(nrows=1, ncols=1, figsize=figsizenow)
+frame = 284
+B = allmaps[frame-1]
+A = allmaps[frame]
+A_bin = A.copy()
+B_bin = B.copy()
+A_bin[A_bin!=0] = 1 
+A_bin[A_bin==0] = 0 
+B_bin[B_bin!=0] = 1 
+B_bin[B_bin==0] = 0
+bc = get_clusters(B, dbscan)
+bc2 = bc[bc[:,0] != -1]
+B_bin[bc2[:,1], bc2[:,2]] = 2
+ac = get_clusters(A, dbscan)
+ac2 = ac[ac[:,0] != -1]
+A_bin[ac2[:,1], ac2[:,2]] = 2
+centroids, _ = measure_clusters(bc)
+axis.imshow(B_bin, cmap=cmap, interpolation='none')
+for centr_number, centroid in enumerate(centroids):
+    axis.set_title(cnames[0])
+    axis.text(x = centroid[1]+10, y = centroid[0]-5, s=str(centr_number), bbox=dict(color='gray', alpha=0.1))
+fig.savefig('pics/matching_A.pdf')
+fig, axis = plt.subplots(nrows=1, ncols=1, figsize=figsizenow)
+centroids, _ = measure_clusters(ac)
+axis.imshow(A_bin, cmap=cmap, interpolation='none')
+simmilarities, (dist, shape) = cluster_simmilarity(bc, ac)
+label_mapping = get_cluster_mapping(simmilarities)
+for centr_number, centroid in enumerate(centroids):
+    axis.set_title(cnames[1])
+    if centr_number in label_mapping.keys():
+        name = str(label_mapping[centr_number])
+    else:
+        name = 'new'
+    axis.text(x = centroid[1]+10, y = centroid[0]-10, s=name, bbox=dict(color='gray', alpha=0.1))
+fig.savefig('pics/matching_B.pdf')
+
+# %%
+fig, axis = plt.subplots(nrows=1, ncols=1, figsize=(7,7))
+frame = 146
+B = allmaps[frame-1]
+A = allmaps[frame]
+A_bin = A.copy()
+B_bin = B.copy()
+A_bin[A_bin!=0] = 1 
+A_bin[A_bin==0] = 0 
+B_bin[B_bin!=0] = 1 
+B_bin[B_bin==0] = 0
+bc = get_clusters(B, dbscan)
+bc2 = bc[bc[:,0] != -1]
+B_bin[bc2[:,1], bc2[:,2]] = 2
+centroids, _ = measure_clusters(bc)
+axis.imshow(B_bin, cmap=cmap, interpolation='none')
+for centr_number, centroid in enumerate(centroids):
+    axis.set_title(cnames[0])
+    axis.text(x = centroid[1]+8, y = centroid[0]+5, s=str(centr_number), bbox=dict(color='gray', alpha=0.1))
+fig.savefig('pics/example_clusters.pdf')
 
 
 # %% [markdown]
